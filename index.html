@@ -12,15 +12,23 @@
 
   <style>
     body { margin:0; padding:0; font-family:"Times New Roman", serif; background:#e0e0e0; }
-    h1 { text-align:center; padding:20px; margin:0; background:#fff; border-bottom: 2px solid #000; }
-    #mapContainer { margin: 20px auto; width: 95%; height: 80vh; border: 6px solid #000; }
+    h1 { text-align:center; padding:20px; margin:0; background:#fff; border-bottom: 2px solid #000; font-size:2.2em; }
+    #mapContainer { margin: 20px auto; width: 95%; height: 80vh; border: 6px solid #000; position:relative; }
     #map { width:100%; height:100%; }
     section { max-width:600px; margin:20px auto; padding:15px; background:#fff; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15); }
-    #sliderContainer { position:absolute; bottom:16px; left:16px; z-index:1100; background: rgba(255,255,255,0.95); padding:10px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.2); }
-    .info { z-index:1000; position:absolute; right:20px; top:20px; background: rgba(255,255,255,0.95); padding:8px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15); }
-    .legend { z-index:1000; position:absolute; right:20px; bottom:20px; background: rgba(255,255,255,0.95); padding:8px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15); }
+    #sliderContainer {
+      position:absolute; bottom:16px; left:16px; z-index:1100;
+      background: rgba(255,255,255,0.95); padding:10px; border-radius:6px;
+      box-shadow:0 0 8px rgba(0,0,0,0.2);
+    }
+    .info { z-index:1000; position:absolute; right:20px; top:20px; background: rgba(255,255,255,0.95); padding:8px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15);}
+    .legend { z-index:1000; position:absolute; right:20px; bottom:20px; background: rgba(255,255,255,0.95); padding:8px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15);}
     .legend i { width:18px; height:16px; float:left; margin-right:8px; opacity:0.95; }
     .small { font-size:12px; color:#333; }
+    #logo {
+      position:absolute; top:20px; right:20px; z-index:1200;
+      width:80px; height:auto;
+    }
   </style>
 </head>
 <body>
@@ -30,15 +38,16 @@
 <section>
   <h2>About this Map</h2>
   <p>This map shows the 2024 Paris Olympic Games and the medal count over the 16-day period of the games.</p>
+  <p>For more information, visit the <a href="https://www.olympic.org/paris-2024" target="_blank">official Olympic page</a>.</p>
 </section>
 
 <div id="mapContainer">
   <div id="map"></div>
+  <img id="logo" src="assets/olympic_logo.png" alt="Olympic Logo">
 
   <div id="sliderContainer">
     <div><strong>Day: <span id="dayLabel">0</span></strong></div>
     <input id="daySlider" type="range" min="0" max="16" value="0" style="width:250px;">
-    <div class="small">CSV file: <code>assets/medals.csv</code></div>
   </div>
 
   <div class="info" id="infoBox"><h4>Olympic Medals</h4><div>Hover over a country</div></div>
@@ -53,15 +62,14 @@ var Esri_WorldGrayCanvas = L.tileLayer('https://server.arcgisonline.com/ArcGIS/r
   maxZoom: 16
 }).addTo(map);
 
-const palette = ['#f0f0f0','#edf8fb','#b2e2e2','#66c2a4','#2ca25f','#006d2c','#00441b'];
-const fixedBreaks = [0, 1, 5, 10, 20, 30, 50, 100];
-
+const palette = ['#fdf6e3','#edf8fb','#b2e2e2','#66c2a4','#2ca25f','#006d2c'];
 const DAY_COUNT = 16;
 let csvDataByName = {};
 let dayFieldNames = {};
 let countryLayer = null;
 let currentDay = 0;
 
+// Helpers
 function normalizeName(s){ return (s||'').trim().replace(/\s+/g,' ').toLowerCase(); }
 function toIntSafe(v){ const n = parseInt(String(v||0).trim().replace(/[^0-9\-]/g,''),10); return isNaN(n)?0:n; }
 
@@ -76,10 +84,11 @@ function detectDayFields(headers){
       if(dnum>=0 && dnum<=DAY_COUNT) map[dnum] = h;
     }
   });
-  for(let d=0;d<=DAY_COUNT;d++) if(!map[d]) map[d]=null;
+  for(let d=0; d<=DAY_COUNT; d++) if(!map[d]) map[d]=null;
   return map;
 }
 
+// Load CSV
 Papa.parse('assets/medals.csv', {
   download:true, header:true, skipEmptyLines:true,
   complete:function(results){
@@ -96,6 +105,7 @@ Papa.parse('assets/medals.csv', {
   error: function(err){ console.error('CSV load error', err); alert('Failed to load medals.csv'); }
 });
 
+// Load GeoJSON
 function loadCountriesGeoJSON(){
   countryLayer = L.geoJson.ajax('assets/Countries.geojson',{
     style: featureStyle,
@@ -112,18 +122,38 @@ function getCumulativeValue(row, day){
   return sum;
 }
 
+// Compute breaks for legend
+function computeBreaks(){
+  let values = [];
+  for(const key in csvDataByName){
+    values.push(getCumulativeValue(csvDataByName[key], DAY_COUNT));
+  }
+  values.sort((a,b)=>a-b);
+  const breaks = [];
+  const n = values.length;
+  for(let i=0;i<palette.length;i++){
+    const idx = Math.floor(i*n/palette.length);
+    breaks.push(values[idx]);
+  }
+  breaks.push(values[n-1]+1);
+  return breaks;
+}
+let stableBreaks = [];
+
+// Color function
 function getColorForValue(v){
-  for(let i=0;i<fixedBreaks.length-1;i++){
-    if(v>=fixedBreaks[i] && v<fixedBreaks[i+1]) return palette[i];
+  if(v===0) return palette[0]; // medalless
+  for(let i=0;i<stableBreaks.length-1;i++){
+    if(v>=stableBreaks[i] && v<stableBreaks[i+1]) return palette[i+1];
   }
   return palette[palette.length-1];
 }
 
+// Feature style
 function featureStyle(feature){
   const key = normalizeName(feature.properties.name);
   const row = csvDataByName[key];
-  const val = row ? getCumulativeValue(row, currentDay) : 0;
-
+  const val = row ? getCumulativeValue(row,currentDay) : 0;
   return {
     fillColor: getColorForValue(val),
     weight: 1,
@@ -132,6 +162,7 @@ function featureStyle(feature){
   };
 }
 
+// Interactions
 function onEachFeature(feature, layer){
   layer.on({
     mouseover:function(e){ e.target.setStyle({weight:3,color:'#000'}); e.target.bringToFront(); updateInfoBox(feature); },
@@ -140,6 +171,7 @@ function onEachFeature(feature, layer){
   });
 }
 
+// Info box
 function updateInfoBox(feature){
   const info = document.getElementById('infoBox');
   const name = feature.properties.name || 'Unknown';
@@ -148,39 +180,40 @@ function updateInfoBox(feature){
   const medals = row ? getCumulativeValue(row,currentDay) : 0;
   info.innerHTML = '<h4>2024 Olympic Medals</h4><b>'+name+'</b><br>Day '+currentDay+': <b>'+medals+'</b> cumulative medals';
 }
-
 function resetInfoBox(){
   document.getElementById('infoBox').innerHTML='<h4>Olympic Medals</h4><div>Hover over a country</div>';
 }
 
+// Slider
 const slider = document.getElementById('daySlider');
 const dayLabel = document.getElementById('dayLabel');
 slider.addEventListener('input', function(){
   currentDay=parseInt(this.value,10);
   dayLabel.innerText=currentDay;
   if(countryLayer) countryLayer.setStyle(featureStyle);
-  updateLegend();
 });
 
+// Legend
 function buildLegend(){
   const el = document.getElementById('legend');
   let html='<strong>Total Medals</strong><br>';
-  for(let i=0;i<fixedBreaks.length-1;i++){
-    let label = fixedBreaks[i] === 0 ? '0 medals' : fixedBreaks[i]+' – '+(fixedBreaks[i+1]-1);
-    html+='<i style="background:'+palette[i]+'"></i> '+label+'<br>';
+  for(let i=0;i<stableBreaks.length-1;i++){
+    const from = i===0 ? 0 : stableBreaks[i];
+    const to = stableBreaks[i+1]-1;
+    html+='<i style="background:'+palette[i]+'"></i> '+from+' – '+to+'<br>';
   }
   el.innerHTML = html;
 }
 
-function updateLegend(){
+// Initialize stable breaks and legend
+setTimeout(()=>{
+  stableBreaks = computeBreaks();
   buildLegend();
-}
+},500);
 
-setTimeout(updateLegend,500);
 </script>
 </body>
 </html>
 
-</html>
 
 
