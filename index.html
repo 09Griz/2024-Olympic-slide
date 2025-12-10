@@ -16,18 +16,21 @@
     #mapContainer { margin: 20px auto; width: 95%; height: 80vh; border: 6px solid #000; position:relative; }
     #map { width:100%; height:100%; }
     section { max-width:600px; margin:20px auto; padding:15px; background:#fff; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15); }
-    #sliderContainer {
-      position:absolute; bottom:16px; left:16px; z-index:1100;
-      background: rgba(255,255,255,0.95); padding:10px; border-radius:6px;
-      box-shadow:0 0 8px rgba(0,0,0,0.2);
-    }
-    .info { z-index:1000; position:absolute; right:20px; top:20px; background: rgba(255,255,255,0.95); padding:8px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15);}
-    .legend { z-index:1000; position:absolute; right:20px; bottom:20px; background: rgba(255,255,255,0.95); padding:8px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15);}
+    #sliderContainer { position:absolute; bottom:16px; left:16px; z-index:1100; background: rgba(255,255,255,0.95); padding:10px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.2); }
+    .info { z-index:1000; position:absolute; right:20px; top:20px; background: rgba(255,255,255,0.95); padding:8px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15); }
+    .legend { z-index:1000; position:absolute; right:20px; bottom:20px; background: rgba(255,255,255,0.95); padding:8px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15); }
     .legend i { width:18px; height:16px; float:left; margin-right:8px; opacity:0.95; }
     .small { font-size:12px; color:#333; }
-    #logo {
-      position:absolute; top:20px; right:20px; z-index:1200;
-      width:80px; height:auto;
+
+    #olympicLogo {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 80px;
+      height: auto;
+      z-index: 1200;
+      border-radius: 6px;
+      box-shadow: 0 0 6px rgba(0,0,0,0.3);
     }
   </style>
 </head>
@@ -38,12 +41,12 @@
 <section>
   <h2>About this Map</h2>
   <p>This map shows the 2024 Paris Olympic Games and the medal count over the 16-day period of the games.</p>
-  <p>For more information, visit the <a href="https://www.olympic.org/paris-2024" target="_blank">official Olympic page</a>.</p>
+  <p>Official Olympic page: <a href="https://www.olympics.com/en/" target="_blank">Olympics.com</a></p>
 </section>
 
 <div id="mapContainer">
   <div id="map"></div>
-  <img id="logo" src="assets/olympic_logo.png" alt="Olympic Logo">
+  <img id="olympicLogo" src="https://raw.githubusercontent.com/09Griz/2024-Olympic-slide/main/6aefa38e7fd1dcfd8224a673bb2d2211.png" alt="Olympic Logo">
 
   <div id="sliderContainer">
     <div><strong>Day: <span id="dayLabel">0</span></strong></div>
@@ -55,21 +58,21 @@
 </div>
 
 <script>
-const map = L.map('map').setView([48.8566, 2.3522], 3);
+const map = L.map('map').setView([48.8566, 2.3522], 3); // Center on Paris
 
+// Basemap
 var Esri_WorldGrayCanvas = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
   attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
   maxZoom: 16
 }).addTo(map);
 
-const palette = ['#fdf6e3','#edf8fb','#b2e2e2','#66c2a4','#2ca25f','#006d2c'];
+const palette = ['#f7f4e9','#edf8fb','#b2e2e2','#66c2a4','#2ca25f','#006d2c'];
 const DAY_COUNT = 16;
 let csvDataByName = {};
 let dayFieldNames = {};
 let countryLayer = null;
 let currentDay = 0;
 
-// Helpers
 function normalizeName(s){ return (s||'').trim().replace(/\s+/g,' ').toLowerCase(); }
 function toIntSafe(v){ const n = parseInt(String(v||0).trim().replace(/[^0-9\-]/g,''),10); return isNaN(n)?0:n; }
 
@@ -84,12 +87,11 @@ function detectDayFields(headers){
       if(dnum>=0 && dnum<=DAY_COUNT) map[dnum] = h;
     }
   });
-  for(let d=0; d<=DAY_COUNT; d++) if(!map[d]) map[d]=null;
+  for(let d=0;d<=DAY_COUNT;d++) if(!map[d]) map[d]=null;
   return map;
 }
 
-// Load CSV
-Papa.parse('assets/medals.csv', {
+Papa.parse('medals.csv', {
   download:true, header:true, skipEmptyLines:true,
   complete:function(results){
     const headers = results.meta.fields;
@@ -105,9 +107,8 @@ Papa.parse('assets/medals.csv', {
   error: function(err){ console.error('CSV load error', err); alert('Failed to load medals.csv'); }
 });
 
-// Load GeoJSON
 function loadCountriesGeoJSON(){
-  countryLayer = L.geoJson.ajax('assets/Countries.geojson',{
+  countryLayer = L.geoJson.ajax('Countries.geojson',{
     style: featureStyle,
     onEachFeature: onEachFeature
   }).addTo(map);
@@ -122,7 +123,6 @@ function getCumulativeValue(row, day){
   return sum;
 }
 
-// Compute breaks for legend
 function computeBreaks(){
   let values = [];
   for(const key in csvDataByName){
@@ -131,38 +131,36 @@ function computeBreaks(){
   values.sort((a,b)=>a-b);
   const breaks = [];
   const n = values.length;
-  for(let i=0;i<palette.length;i++){
-    const idx = Math.floor(i*n/palette.length);
+  for(let i=0;i<6;i++){
+    const idx = Math.floor(i*n/6);
     breaks.push(values[idx]);
   }
   breaks.push(values[n-1]+1);
   return breaks;
 }
-let stableBreaks = [];
 
-// Color function
+const stableBreaks = computeBreaks();
+
 function getColorForValue(v){
-  if(v===0) return palette[0]; // medalless
+  if(v===0) return '#f7f4e9'; // medalless countries
   for(let i=0;i<stableBreaks.length-1;i++){
-    if(v>=stableBreaks[i] && v<stableBreaks[i+1]) return palette[i+1];
+    if(v>=stableBreaks[i] && v<stableBreaks[i+1]) return palette[i];
   }
   return palette[palette.length-1];
 }
 
-// Feature style
 function featureStyle(feature){
   const key = normalizeName(feature.properties.name);
   const row = csvDataByName[key];
-  const val = row ? getCumulativeValue(row,currentDay) : 0;
+  const val = row ? getCumulativeValue(row, currentDay) : 0;
   return {
     fillColor: getColorForValue(val),
     weight: 1,
-    color: '#000',
+    color: '#000', // black border
     fillOpacity: 0.6
   };
 }
 
-// Interactions
 function onEachFeature(feature, layer){
   layer.on({
     mouseover:function(e){ e.target.setStyle({weight:3,color:'#000'}); e.target.bringToFront(); updateInfoBox(feature); },
@@ -171,7 +169,6 @@ function onEachFeature(feature, layer){
   });
 }
 
-// Info box
 function updateInfoBox(feature){
   const info = document.getElementById('infoBox');
   const name = feature.properties.name || 'Unknown';
@@ -180,11 +177,11 @@ function updateInfoBox(feature){
   const medals = row ? getCumulativeValue(row,currentDay) : 0;
   info.innerHTML = '<h4>2024 Olympic Medals</h4><b>'+name+'</b><br>Day '+currentDay+': <b>'+medals+'</b> cumulative medals';
 }
+
 function resetInfoBox(){
   document.getElementById('infoBox').innerHTML='<h4>Olympic Medals</h4><div>Hover over a country</div>';
 }
 
-// Slider
 const slider = document.getElementById('daySlider');
 const dayLabel = document.getElementById('dayLabel');
 slider.addEventListener('input', function(){
@@ -193,27 +190,23 @@ slider.addEventListener('input', function(){
   if(countryLayer) countryLayer.setStyle(featureStyle);
 });
 
-// Legend
 function buildLegend(){
   const el = document.getElementById('legend');
   let html='<strong>Total Medals</strong><br>';
   for(let i=0;i<stableBreaks.length-1;i++){
-    const from = i===0 ? 0 : stableBreaks[i];
+    const from = stableBreaks[i];
     const to = stableBreaks[i+1]-1;
     html+='<i style="background:'+palette[i]+'"></i> '+from+' – '+to+'<br>';
   }
   el.innerHTML = html;
 }
 
-// Initialize stable breaks and legend
-setTimeout(()=>{
-  stableBreaks = computeBreaks();
-  buildLegend();
-},500);
-
+buildLegend();
 </script>
 </body>
 </html>
+
+
 
 
 
