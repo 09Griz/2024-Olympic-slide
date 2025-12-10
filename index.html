@@ -12,45 +12,37 @@
 
   <style>
     body { margin:0; padding:0; font-family:"Times New Roman", serif; background:#e0e0e0; }
-    h1 { text-align:center; padding:20px; margin:0; background:#fff; border-bottom: 2px solid #000; font-size:2.2em; }
-    #mapContainer { margin: 20px auto; width: 95%; height: 80vh; border: 6px solid #000; position:relative; }
+    h1 { text-align:center; padding:20px; margin:0; background:#fff; border-bottom: 2px solid #000; font-size:2.5em; font-weight:bold; position: relative; }
+    #logo { position:absolute; top:10px; right:20px; height:60px; z-index:900; }
+    #mapContainer { margin: 20px auto; width: 95%; height: 80vh; border: 6px solid #000; position: relative; } 
     #map { width:100%; height:100%; }
     section { max-width:600px; margin:20px auto; padding:15px; background:#fff; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15); }
-    #sliderContainer { position:absolute; bottom:16px; left:16px; z-index:1100; background: rgba(255,255,255,0.95); padding:10px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.2); }
+    section a { color:#005daa; text-decoration:none; }
+    section a:hover { text-decoration:underline; }
+    #sliderContainer { position:absolute; bottom:16px; left:50%; transform:translateX(-50%); z-index:1100; background: rgba(255,255,255,0.95); padding:10px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.2); }
     .info { z-index:1000; position:absolute; right:20px; top:20px; background: rgba(255,255,255,0.95); padding:8px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15); }
     .legend { z-index:1000; position:absolute; right:20px; bottom:20px; background: rgba(255,255,255,0.95); padding:8px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15); }
     .legend i { width:18px; height:16px; float:left; margin-right:8px; opacity:0.95; }
     .small { font-size:12px; color:#333; }
-
-    #olympicLogo {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      width: 80px;
-      height: auto;
-      z-index: 1200;
-      border-radius: 6px;
-      box-shadow: 0 0 6px rgba(0,0,0,0.3);
-    }
   </style>
 </head>
 <body>
 
 <h1>2024 Paris Olympic Medals</h1>
+<img src="https://upload.wikimedia.org/wikipedia/commons/5/5c/Olympic_rings.svg" id="logo" alt="Olympic Logo">
 
 <section>
   <h2>About this Map</h2>
   <p>This map shows the 2024 Paris Olympic Games and the medal count over the 16-day period of the games.</p>
-  <p>Official Olympic page: <a href="https://www.olympics.com/en/" target="_blank">Olympics.com</a></p>
+  <p>For more details, visit the <a href="https://www.olympic.org/paris-2024" target="_blank">official Paris 2024 Olympics page</a>.</p>
 </section>
 
 <div id="mapContainer">
   <div id="map"></div>
-  <img id="olympicLogo" src="https://raw.githubusercontent.com/09Griz/2024-Olympic-slide/main/6aefa38e7fd1dcfd8224a673bb2d2211.png" alt="Olympic Logo">
 
   <div id="sliderContainer">
     <div><strong>Day: <span id="dayLabel">0</span></strong></div>
-    <input id="daySlider" type="range" min="0" max="16" value="0" style="width:250px;">
+    <input id="daySlider" type="range" min="0" max="16" value="0" style="width:300px;">
   </div>
 
   <div class="info" id="infoBox"><h4>Olympic Medals</h4><div>Hover over a country</div></div>
@@ -58,7 +50,8 @@
 </div>
 
 <script>
-const map = L.map('map').setView([48.8566, 2.3522], 3); // Center on Paris
+// Initialize map
+const map = L.map('map').setView([48.8566, 2.3522], 3);
 
 // Basemap
 var Esri_WorldGrayCanvas = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
@@ -66,12 +59,13 @@ var Esri_WorldGrayCanvas = L.tileLayer('https://server.arcgisonline.com/ArcGIS/r
   maxZoom: 16
 }).addTo(map);
 
-const palette = ['#f7f4e9','#edf8fb','#b2e2e2','#66c2a4','#2ca25f','#006d2c'];
+const palette = ['#fefae0','#edf8fb','#b2e2e2','#66c2a4','#2ca25f','#006d2c','#00441b'];
 const DAY_COUNT = 16;
 let csvDataByName = {};
 let dayFieldNames = {};
 let countryLayer = null;
 let currentDay = 0;
+let stableBreaks = [];
 
 function normalizeName(s){ return (s||'').trim().replace(/\s+/g,' ').toLowerCase(); }
 function toIntSafe(v){ const n = parseInt(String(v||0).trim().replace(/[^0-9\-]/g,''),10); return isNaN(n)?0:n; }
@@ -102,10 +96,31 @@ Papa.parse('assets/medals.csv', {
       const key = normalizeName(row[countryHeader]);
       if(key) csvDataByName[key]=row;
     });
+    computeStableBreaks(); 
     loadCountriesGeoJSON();
   },
   error: function(err){ console.error('CSV load error', err); alert('Failed to load medals.csv'); }
 });
+
+function computeStableBreaks(){
+  let values = [];
+  for(const key in csvDataByName){
+    const row = csvDataByName[key];
+    let total = 0;
+    for(let d=1; d<=DAY_COUNT; d++){
+      total += toIntSafe(row[dayFieldNames[d]]);
+    }
+    values.push(total);
+  }
+  values.sort((a,b)=>a-b);
+  const n = values.length;
+  stableBreaks = [];
+  for(let i=0;i<palette.length-1;i++){
+    const idx = Math.floor(i*n/(palette.length-1));
+    stableBreaks.push(values[idx]);
+  }
+  stableBreaks.push(values[n-1]+1);
+}
 
 function loadCountriesGeoJSON(){
   countryLayer = L.geoJson.ajax('assets/Countries.geojson',{
@@ -115,36 +130,19 @@ function loadCountriesGeoJSON(){
 }
 
 function getCumulativeValue(row, day){
+  if(day===0) return 0;
   let sum=0;
-  for(let d=0; d<=day; d++){
+  for(let d=1; d<=day; d++){
     const field = dayFieldNames[d];
     if(field) sum += toIntSafe(row[field]);
   }
   return sum;
 }
 
-function computeBreaks(){
-  let values = [];
-  for(const key in csvDataByName){
-    values.push(getCumulativeValue(csvDataByName[key], DAY_COUNT));
-  }
-  values.sort((a,b)=>a-b);
-  const breaks = [];
-  const n = values.length;
-  for(let i=0;i<6;i++){
-    const idx = Math.floor(i*n/6);
-    breaks.push(values[idx]);
-  }
-  breaks.push(values[n-1]+1);
-  return breaks;
-}
-
-const stableBreaks = computeBreaks();
-
 function getColorForValue(v){
-  if(v===0) return '#f7f4e9'; // medalless countries
+  if(v===0) return '#fefae0';
   for(let i=0;i<stableBreaks.length-1;i++){
-    if(v>=stableBreaks[i] && v<stableBreaks[i+1]) return palette[i];
+    if(v>=stableBreaks[i] && v<stableBreaks[i+1]) return palette[i+1];
   }
   return palette[palette.length-1];
 }
@@ -156,7 +154,7 @@ function featureStyle(feature){
   return {
     fillColor: getColorForValue(val),
     weight: 1,
-    color: '#000', // black border
+    color: '#000',
     fillOpacity: 0.6
   };
 }
@@ -193,7 +191,8 @@ slider.addEventListener('input', function(){
 function buildLegend(){
   const el = document.getElementById('legend');
   let html='<strong>Total Medals</strong><br>';
-  for(let i=0;i<stableBreaks.length-1;i++){
+  html+='<i style="background:#fefae0"></i> 0 medals<br>';
+  for(let i=1;i<stableBreaks.length-1;i++){
     const from = stableBreaks[i];
     const to = stableBreaks[i+1]-1;
     html+='<i style="background:'+palette[i]+'"></i> '+from+' – '+to+'<br>';
@@ -201,10 +200,11 @@ function buildLegend(){
   el.innerHTML = html;
 }
 
-buildLegend();
+setTimeout(buildLegend,500);
 </script>
 </body>
 </html>
+
 
 
 
