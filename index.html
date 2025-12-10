@@ -13,7 +13,7 @@
   <style>
     body { margin:0; padding:0; font-family:"Times New Roman", serif; background:#e0e0e0; }
     h1 { text-align:center; padding:20px; margin:0; background:#fff; border-bottom: 2px solid #000; }
-    #mapContainer { margin: 20px auto; width: 95%; height: 80vh; border: 6px solid #000; } /* Black border */
+    #mapContainer { margin: 20px auto; width: 95%; height: 80vh; border: 6px solid #000; }
     #map { width:100%; height:100%; }
     section { max-width:600px; margin:20px auto; padding:15px; background:#fff; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.15); }
     #sliderContainer { position:absolute; bottom:16px; left:16px; z-index:1100; background: rgba(255,255,255,0.95); padding:10px; border-radius:6px; box-shadow:0 0 8px rgba(0,0,0,0.2); }
@@ -38,7 +38,7 @@
   <div id="sliderContainer">
     <div><strong>Day: <span id="dayLabel">0</span></strong></div>
     <input id="daySlider" type="range" min="0" max="16" value="0" style="width:250px;">
-    <div class="small">CSV file: <code>medals.csv</code></div>
+    <div class="small">CSV file: <code>assets/medals.csv</code></div>
   </div>
 
   <div class="info" id="infoBox"><h4>Olympic Medals</h4><div>Hover over a country</div></div>
@@ -46,15 +46,16 @@
 </div>
 
 <script>
-const map = L.map('map').setView([48.8566, 2.3522], 3); // Center on Paris
+const map = L.map('map').setView([48.8566, 2.3522], 3);
 
-// Basemap
 var Esri_WorldGrayCanvas = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
   attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
   maxZoom: 16
 }).addTo(map);
 
-const palette = ['#edf8fb','#b2e2e2','#66c2a4','#2ca25f','#006d2c','#00441b'];
+const palette = ['#f0f0f0','#edf8fb','#b2e2e2','#66c2a4','#2ca25f','#006d2c','#00441b'];
+const fixedBreaks = [0, 1, 5, 10, 20, 30, 50, 100];
+
 const DAY_COUNT = 16;
 let csvDataByName = {};
 let dayFieldNames = {};
@@ -79,7 +80,7 @@ function detectDayFields(headers){
   return map;
 }
 
-Papa.parse('medals.csv', {
+Papa.parse('assets/medals.csv', {
   download:true, header:true, skipEmptyLines:true,
   complete:function(results){
     const headers = results.meta.fields;
@@ -96,7 +97,7 @@ Papa.parse('medals.csv', {
 });
 
 function loadCountriesGeoJSON(){
-  countryLayer = L.geoJson.ajax('Countries.geojson',{
+  countryLayer = L.geoJson.ajax('assets/Countries.geojson',{
     style: featureStyle,
     onEachFeature: onEachFeature
   }).addTo(map);
@@ -111,25 +112,9 @@ function getCumulativeValue(row, day){
   return sum;
 }
 
-function computeBreaksForDay(){
-  let values = [];
-  for(const key in csvDataByName){
-    values.push(getCumulativeValue(csvDataByName[key], currentDay));
-  }
-  values.sort((a,b)=>a-b);
-  const breaks = [];
-  const n = values.length;
-  for(let i=0;i<6;i++){
-    const idx = Math.floor(i*n/6);
-    breaks.push(values[idx]);
-  }
-  breaks.push(values[n-1]+1);
-  return breaks;
-}
-
-function getColorForValue(v, breaks){
-  for(let i=0;i<breaks.length-1;i++){
-    if(v>=breaks[i] && v<breaks[i+1]) return palette[i];
+function getColorForValue(v){
+  for(let i=0;i<fixedBreaks.length-1;i++){
+    if(v>=fixedBreaks[i] && v<fixedBreaks[i+1]) return palette[i];
   }
   return palette[palette.length-1];
 }
@@ -138,12 +123,12 @@ function featureStyle(feature){
   const key = normalizeName(feature.properties.name);
   const row = csvDataByName[key];
   const val = row ? getCumulativeValue(row, currentDay) : 0;
-  const breaks = computeBreaksForDay();
+
   return {
-    fillColor: getColorForValue(val, breaks),
+    fillColor: getColorForValue(val),
     weight: 1,
-    color: '#555',
-    fillOpacity: 0.6 // semi-transparent
+    color: '#000',
+    fillOpacity: 0.6
   };
 }
 
@@ -177,24 +162,25 @@ slider.addEventListener('input', function(){
   updateLegend();
 });
 
-function buildLegend(breaks){
+function buildLegend(){
   const el = document.getElementById('legend');
   let html='<strong>Total Medals</strong><br>';
-  for(let i=0;i<breaks.length-1;i++){
-    const from = breaks[i];
-    const to = breaks[i+1]-1;
-    html+='<i style="background:'+palette[i]+'"></i> '+from+' – '+to+'<br>';
+  for(let i=0;i<fixedBreaks.length-1;i++){
+    let label = fixedBreaks[i] === 0 ? '0 medals' : fixedBreaks[i]+' – '+(fixedBreaks[i+1]-1);
+    html+='<i style="background:'+palette[i]+'"></i> '+label+'<br>';
   }
   el.innerHTML = html;
 }
 
 function updateLegend(){
-  const breaks = computeBreaksForDay();
-  buildLegend(breaks);
+  buildLegend();
 }
 
 setTimeout(updateLegend,500);
 </script>
 </body>
 </html>
+
+</html>
+
 
